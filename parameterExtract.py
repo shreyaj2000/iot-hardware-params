@@ -7,35 +7,30 @@ import datetime
 
 def main():
     tracemalloc.start()
-    # print ('Nr. of processes: ' +str(get_process_count()))
-    # print ('Nr. of connections: ' +str(get_connections()))
-    # print ('IP-address: ' +get_ipaddress())
-    # print ('CPU speed: ' +str(get_cpu_speed()))
     # sending the uptime command as an argument to popen()
     print(os.popen('uptime -p').read()[:-1])
-    # Sensor temperatures
-    print(psutil.sensors_temperatures())
     # Boot Time
     print('boot time: '+ str(datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%d %H:%M:%S")))
     
-    '''
-    CPU Information
-    '''
+    print('================ CPU Info =================')
+    # Sensor temperatures
+    sensors_temperatures = psutil.sensors_temperatures(fahrenheit=False)
+    for name, entries in sensors_temperatures.items():
+        for entry in entries:
+            print(f'Current CPU Temp: ' + str(entry.current))
     # CPU utilization as a percentage. percentage of processor being used
-    print('cpu %:' + str(psutil.cpu_percent()))
+    print('cpu %: ' + str(psutil.cpu_percent()))
     # Number of logical CPUs in the system
-    print('cpu count:' + str(psutil.cpu_count()))
+    print('cpu count: ' + str(psutil.cpu_count()))
     # CPU statistics (monitoring system call  for malware attack)
-    print(psutil.cpu_stats())
+    print('System calls: ' + str(psutil.cpu_stats().syscalls))
     # CPU Frequency/clock speed
-    print('cpu freq:' + str(psutil.cpu_freq()))
+    print(f"Current CPU Frequency: {psutil.cpu_freq().current:.2f}Mhz")
     # average system load over the last 1, 5 and 15 minutes
     # Processes which are using the CPU or waiting to use the CPU
     print('system load:' + str([x / psutil.cpu_count() * 100 for x in psutil.getloadavg()]))
     
-    '''
-    Memory Information
-    '''
+    print('=============== Memory Info ================')
     # Total physical memory in gb
     print('total physical memory:' + str(psutil.virtual_memory().total/10**9)+ ' GB')
     # Memory currently in use, and so it is in RAM
@@ -45,31 +40,28 @@ def main():
     # you can have the percentage of used RAM
     print('memory % used:', str(psutil.virtual_memory().percent))
     
-    '''
-    Disk Usage
-    '''
+    print('================ Disk Usage =================')
     # hard drive storage. How much percentage of storage (HDD, SSD) being used.
-    print(psutil.disk_usage('/'))
+    print('disk usage %: ' + str(psutil.disk_usage('/').percent))
     
-    '''
-    Network Peformance
-    '''
+    print('============ Network Performance ==============')
     # Bytes sent
-    print('number of bytes sent:' + str(psutil.net_io_counters().bytes_sent))
+    print('number of bytes sent: ' + str(psutil.net_io_counters().bytes_sent))
     # Bytes received
-    print('number of bytes received:' + str(psutil.net_io_counters().bytes_recv))
+    print('number of bytes received: ' + str(psutil.net_io_counters().bytes_recv))
     # Packets sent
-    print('number of bytes sent:' + str(psutil.net_io_counters().packets_sent))
+    print('number of packets sent: ' + str(psutil.net_io_counters().packets_sent))
     # Packets received
-    print('number of bytes sent:' + str(psutil.net_io_counters().packets_recv))
+    print('number of packets received: ' + str(psutil.net_io_counters().packets_recv))
     # Info about each Network Interface Card
     print(psutil.net_if_stats())
     
     
 
-    print('---------------------------')
+    print('----------------------------------------------')
     current, peak = tracemalloc.get_traced_memory()
     print(f"Program memory usage is {current / 10**6}MB; Peak was {peak / 10**6}MB")
+    print(f'{peak *100 / psutil.virtual_memory().active:.3f} % of used RAM')
     tracemalloc.stop()
 
 if __name__=="__main__":
