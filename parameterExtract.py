@@ -3,10 +3,36 @@ import psutil
 import tracemalloc
 import os
 import datetime
+from uuid import getnode as get_mac
+
+try:
+    from jtop import jtop 
+except:
+    print('Unable to import jtop')
+
+try:
+    import RPi.GPIO as GPIO
+except:
+    print('Unable to import RPi.GPIO')
  
 
 def main():
     tracemalloc.start()
+
+    with jtop() as jetson:
+        print('================ Jetson Info =================')
+        print("GPU freq: " + str(jetson.gpu["frq"]))
+        for cpu, stats in jetson.cpu.items():
+            print("CPU freq: " + str(stats["frq"]))
+            break
+        print("GPU temp: " + str(jetson.temperature["GPU"]))
+
+    print('============== Device Info ===============')
+    print("MAC Address: " + str(get_mac()))
+    print("Operating System: " + os.uname().sysname)
+    print("Device Machine: " + os.uname().machine)
+
+    print('================ Boot Info =================')
     # sending the uptime command as an argument to popen()
     print(os.popen('uptime -p').read()[:-1])
     # Boot Time
@@ -16,6 +42,7 @@ def main():
     # Sensor temperatures
     sensors_temperatures = psutil.sensors_temperatures(fahrenheit=False)
     for name, entries in sensors_temperatures.items():
+        print(name)
         for entry in entries:
             print(f'Current CPU Temp: ' + str(entry.current))
     # CPU utilization as a percentage. percentage of processor being used
@@ -26,6 +53,8 @@ def main():
     print('System calls: ' + str(psutil.cpu_stats().syscalls))
     # CPU Frequency/clock speed
     print(f"Current CPU Frequency: {psutil.cpu_freq().current:.2f}Mhz")
+    print(f"Minimum CPU Frequency: {psutil.cpu_freq().min:.2f}Mhz")
+    print(f"Maximum CPU Frequency: {psutil.cpu_freq().max:.2f}Mhz")
     # average system load over the last 1, 5 and 15 minutes
     # Processes which are using the CPU or waiting to use the CPU
     print('system load:' + str([x / psutil.cpu_count() * 100 for x in psutil.getloadavg()]))
