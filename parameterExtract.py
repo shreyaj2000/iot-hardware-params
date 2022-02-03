@@ -2,30 +2,37 @@
 import psutil
 import tracemalloc
 import os
+from os.path import exists
 import datetime
 from uuid import getnode as get_mac
+import time
+import csv
+
+JTOP_IMPORT = False
+RPI_GPIO_IMPORT = False
 
 try:
     from jtop import jtop 
+    JTOP_IMPORT = True
 except:
     print('Unable to import jtop')
 
 try:
     import RPi.GPIO as GPIO
+    RPI_GPIO_IMPORT = True
 except:
     print('Unable to import RPi.GPIO')
- 
 
-def main():
-    tracemalloc.start()
 
-    with jtop() as jetson:
-        print('================ Jetson Info =================')
-        print("GPU freq: " + str(jetson.gpu["frq"]))
-        for cpu, stats in jetson.cpu.items():
-            print("CPU freq: " + str(stats["frq"]))
-            break
-        print("GPU temp: " + str(jetson.temperature["GPU"]))
+def print_data():
+    if JTOP_IMPORT:
+        with jtop() as jetson:
+            print('================ Jetson Info =================')
+            print("GPU freq: " + str(jetson.gpu["frq"]))
+            for cpu, stats in jetson.cpu.items():
+                print("CPU freq: " + str(stats["frq"]))
+                break
+            print("GPU temp: " + str(jetson.temperature["GPU"]))
 
     print('============== Device Info ===============')
     print("MAC Address: " + str(get_mac()))
@@ -40,11 +47,14 @@ def main():
     
     print('================ CPU Info =================')
     # Sensor temperatures
-    sensors_temperatures = psutil.sensors_temperatures(fahrenheit=False)
-    for name, entries in sensors_temperatures.items():
-        print(name)
-        for entry in entries:
-            print(f'Current CPU Temp: ' + str(entry.current))
+    try:
+        sensors_temperatures = psutil.sensors_temperatures(fahrenheit=False)
+        for name, entries in sensors_temperatures.items():
+            print(name)
+            for entry in entries:
+                print(f'Current CPU Temp: ' + str(entry.current))
+    except:
+        print("Cannot pring CPU temp")
     # CPU utilization as a percentage. percentage of processor being used
     print('cpu %: ' + str(psutil.cpu_percent()))
     # Number of logical CPUs in the system
@@ -83,15 +93,87 @@ def main():
     # Packets received
     print('number of packets received: ' + str(psutil.net_io_counters().packets_recv))
     # Info about each Network Interface Card
-    print(psutil.net_if_stats())
-    
-    
+    # print(psutil.net_if_stats())
 
-    print('----------------------------------------------')
-    current, peak = tracemalloc.get_traced_memory()
-    print(f"Program memory usage is {current / 10**6}MB; Peak was {peak / 10**6}MB")
-    print(f'{peak *100 / psutil.virtual_memory().active:.3f} % of used RAM')
-    tracemalloc.stop()
+
+def add_data_to_csv():
+    data = []
+    if JTOP_IMPORT:
+        with jtop() as jetson:
+            data.append(jetson.gpu["frq"])
+            for cpu, stats in jetson.cpu.items():
+                data.append(stats["frq"])
+                break
+            data.append(jetson.temperature["GPU"])
+    data.append(get_mac())
+    data.append(os.uname().sysname)
+    data.append(os.uname().machine)
+    data.append(os.popen('uptime -p').read()[:-1])
+    data.append(datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%d %H:%M:%S"))
+    try:
+        sensors_temperatures = psutil.sensors_temperatures(fahrenheit=False)
+        for name, entries in sensors_temperatures.items():
+            print(name)
+            for entry in entries:
+                data.append(entry.current)
+    except:
+        print("Cannot print CPU temp")
+    data.append(psutil.cpu_percent())
+    data.append(psutil.cpu_count())
+    data.append(psutil.cpu_stats().syscalls)
+    data.append(psutil.cpu_freq().current)
+    data.append(psutil.cpu_freq().min)
+    data.append(psutil.cpu_freq().max)
+    data.append(psutil.getloadavg()[0]/psutil.cpu_count() * 100)
+    data.append(psutil.getloadavg()[1]/psutil.cpu_count() * 100)
+    data.append(psutil.getloadavg()[2]/psutil.cpu_count() * 100)
+    data.append(psutil.virtual_memory().total/10**9)
+    data.append(psutil.virtual_memory().active/10**6)
+    data.append(psutil.virtual_memory().available * 100 / psutil.virtual_memory().total)
+    data.append(psutil.virtual_memory().percent)
+    data.append(psutil.disk_usage('/').percent)
+    data.append(psutil.net_io_counters().bytes_sent)
+    data.append(psutil.net_io_counters().bytes_recv)
+    data.append(psutil.net_io_counters().packets_sent)
+    data.append(psutil.net_io_counters().packets_recv)
+    # data.append(psutil.net_if_stats())
+
+    return data
+
+
+
+def main():
+    # header = ['name', 'area', 'country_code2', 'country_code3']
+    # Month abbreviation, day and year  
+    today = datetime.date.today()
+    date_formatted = today.strftime("%b_%d_%Y")
+    file_name = 'params_' + date_formatted + '.csv'
+    file_exists = exists(file_name)
+    if file_exists:
+        append_write = 'a' # append if already exists
+    else:
+        append_write = 'w' # make a new file if not
+    with open(file_name, append_write, encoding='UTF8') as f:
+        writer = csv.writer(f)
+        # write the header
+        # if not file_exists:
+            # writer.writerow(header)
+        while True:
+            tracemalloc.start()
+
+            # print_data()
+
+            data = add_data_to_csv()
+            
+            # write the data
+            writer.writerow(data)
+
+            print('----------------------------------------------')
+            current, peak = tracemalloc.get_traced_memory()
+            print(f"Program memory usage is {current / 10**6}MB; Peak was {peak / 10**6}MB")
+            print(f'{peak *100 / psutil.virtual_memory().active:.3f} % of used RAM')
+            tracemalloc.stop()
+            time.sleep(15)
 
 if __name__=="__main__":
     main()
