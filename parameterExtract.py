@@ -7,9 +7,10 @@ import datetime
 from uuid import getnode as get_mac
 import time
 import csv
+import re
 
 JTOP_IMPORT = False
-RPI_GPIO_IMPORT = False
+RPI_IMPORT = False
 
 try:
     from jtop import jtop 
@@ -19,7 +20,7 @@ except:
 
 try:
     import RPi.GPIO as GPIO
-    RPI_GPIO_IMPORT = True
+    RPI_IMPORT = True
 except:
     print('Unable to import RPi.GPIO')
 
@@ -33,7 +34,9 @@ def print_data():
                 print("CPU freq: " + str(stats["frq"]))
                 break
             print("GPU temp: " + str(jetson.temperature["GPU"]))
-
+    if RPI_IMPORT:
+        print('================= RPI Info ==================')
+        print(os.popen('vcgencmd measure_volts').read()[:-1])
     print('============== Device Info ===============')
     print("MAC Address: " + str(get_mac()))
     print("Operating System: " + os.uname().sysname)
@@ -54,7 +57,7 @@ def print_data():
             for entry in entries:
                 print(f'Current CPU Temp: ' + str(entry.current))
     except:
-        print("Cannot pring CPU temp")
+        print("Cannot print CPU temp")
     # CPU utilization as a percentage. percentage of processor being used
     print('cpu %: ' + str(psutil.cpu_percent()))
     # Number of logical CPUs in the system
@@ -105,6 +108,8 @@ def add_data_to_csv():
                 data.append(stats["frq"])
                 break
             data.append(jetson.temperature["GPU"])
+    if RPI_IMPORT:
+        data.append(float(re.sub("[^\d\.]", "", os.popen('vcgencmd measure_volts').read()[:-1])))
     data.append(get_mac())
     data.append(os.uname().sysname)
     data.append(os.uname().machine)
@@ -113,7 +118,6 @@ def add_data_to_csv():
     try:
         sensors_temperatures = psutil.sensors_temperatures(fahrenheit=False)
         for name, entries in sensors_temperatures.items():
-            print(name)
             for entry in entries:
                 data.append(entry.current)
     except:
@@ -161,7 +165,7 @@ def main():
         while True:
             tracemalloc.start()
 
-            # print_data()
+            #print_data()
 
             data = add_data_to_csv()
             
@@ -173,7 +177,7 @@ def main():
             print(f"Program memory usage is {current / 10**6}MB; Peak was {peak / 10**6}MB")
             print(f'{peak *100 / psutil.virtual_memory().active:.3f} % of used RAM')
             tracemalloc.stop()
-            time.sleep(15)
+            time.sleep(600)
 
 if __name__=="__main__":
     main()
