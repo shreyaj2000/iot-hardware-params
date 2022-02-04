@@ -8,6 +8,7 @@ from uuid import getnode as get_mac
 import time
 import csv
 import re
+import socket 
 
 JTOP_IMPORT = False
 RPI_IMPORT = False
@@ -41,6 +42,10 @@ def print_data():
     print("MAC Address: " + str(get_mac()))
     print("Operating System: " + os.uname().sysname)
     print("Device Machine: " + os.uname().machine)
+    hostname = socket.gethostname()    
+    IPAddr = socket.gethostbyname(hostname)    
+    print("Computer Name: " + hostname)    
+    print("Computer IP Address: " + IPAddr) 
 
     print('================ Boot Info =================')
     # sending the uptime command as an argument to popen()
@@ -84,6 +89,7 @@ def print_data():
     
     print('================ Disk Usage =================')
     # hard drive storage. How much percentage of storage (HDD, SSD) being used.
+    print('total disk space: ' + str(psutil.disk_usage('/').total/10**9)+' GB')
     print('disk usage %: ' + str(psutil.disk_usage('/').percent))
     
     print('============ Network Performance ==============')
@@ -113,6 +119,10 @@ def add_data_to_csv():
     data.append(get_mac())
     data.append(os.uname().sysname)
     data.append(os.uname().machine)
+    hostname = socket.gethostname()    
+    IPAddr = socket.gethostbyname(hostname)    
+    data.append(hostname)    
+    data.append(IPAddr)
     data.append(os.popen('uptime -p').read()[:-1])
     data.append(datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%d %H:%M:%S"))
     try:
@@ -136,6 +146,7 @@ def add_data_to_csv():
     data.append(psutil.virtual_memory().available * 100 / psutil.virtual_memory().total)
     data.append(psutil.virtual_memory().percent)
     data.append(psutil.disk_usage('/').percent)
+    data.append(psutil.disk_usage('/').total/10**9)
     data.append(psutil.net_io_counters().bytes_sent)
     data.append(psutil.net_io_counters().bytes_recv)
     data.append(psutil.net_io_counters().packets_sent)
@@ -165,7 +176,7 @@ def main():
         while True:
             tracemalloc.start()
 
-            #print_data()
+            print_data()
 
             data = add_data_to_csv()
             
@@ -177,7 +188,7 @@ def main():
             print(f"Program memory usage is {current / 10**6}MB; Peak was {peak / 10**6}MB")
             print(f'{peak *100 / psutil.virtual_memory().active:.3f} % of used RAM')
             tracemalloc.stop()
-            time.sleep(600)
+            time.sleep(300)
 
 if __name__=="__main__":
     main()
