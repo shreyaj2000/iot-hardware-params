@@ -176,7 +176,7 @@ def main():
         while True:
             tracemalloc.start()
 
-            print_data()
+            #print_data()
 
             data = add_data_to_csv()
             
