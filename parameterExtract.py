@@ -35,7 +35,7 @@ def print_data():
                 print("CPU freq: " + str(stats["frq"]))
                 break
             print("GPU temp: " + str(jetson.temperature["GPU"]))
-    if RPI_IMPORT:
+    elif RPI_IMPORT:
         print('================= RPI Info ==================')
         print(os.popen('vcgencmd measure_volts').read()[:-1])
     print('============== Device Info ===============')
@@ -114,7 +114,7 @@ def add_data_to_csv():
                 data.append(stats["frq"])
                 break
             data.append(jetson.temperature["GPU"])
-    if RPI_IMPORT:
+    elif RPI_IMPORT:
         data.append(float(re.sub("[^\d\.]", "", os.popen('vcgencmd measure_volts').read()[:-1])))
     data.append(get_mac())
     data.append(os.uname().sysname)
@@ -162,7 +162,7 @@ def main():
     # Month abbreviation, day and year  
     today = datetime.date.today()
     date_formatted = today.strftime("%b_%d_%Y")
-    file_name = 'params_' + date_formatted + '.csv'
+    file_name = 'params_' + os.uname().machine + '_' + date_formatted + '.csv'
     file_exists = exists(file_name)
     if file_exists:
         append_write = 'a' # append if already exists
