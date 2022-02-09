@@ -38,6 +38,7 @@ def print_data():
     if RPI_IMPORT:
         print('================= RPI Info ==================')
         print(os.popen('vcgencmd measure_volts').read()[:-1])
+        print(os.popen('vcgencmd get_throttled').read()[:-1])
     print('============== Device Info ===============')
     print("MAC Address: " + str(get_mac()))
     print("Operating System: " + os.uname().sysname)
@@ -107,6 +108,7 @@ def print_data():
 
 def add_data_to_csv():
     data = []
+    data.append(datetime.datetime.now())
     if JTOP_IMPORT:
         with jtop() as jetson:
             data.append(jetson.gpu["frq"])
@@ -116,6 +118,7 @@ def add_data_to_csv():
             data.append(jetson.temperature["GPU"])
     if RPI_IMPORT:
         data.append(float(re.sub("[^\d\.]", "", os.popen('vcgencmd measure_volts').read()[:-1])))
+        data.append(re.search(r'0(\w+)', os.popen('vcgencmd get_throttled').read()[:-1]).group())
     data.append(get_mac())
     data.append(os.uname().sysname)
     data.append(os.uname().machine)
@@ -174,6 +177,7 @@ def main():
         # if not file_exists:
             # writer.writerow(header)
         while True:
+            start = datetime.datetime.now()
             tracemalloc.start()
 
             #print_data()
@@ -185,10 +189,11 @@ def main():
 
             print('----------------------------------------------')
             current, peak = tracemalloc.get_traced_memory()
-            print(f"Program memory usage is {current / 10**6}MB; Peak was {peak / 10**6}MB")
-            print(f'{peak *100 / psutil.virtual_memory().active:.3f} % of used RAM')
+            #print(f"Program memory usage is {current / 10**6}MB; Peak was {peak / 10**6}MB")
+            #print(f'{peak *100 / psutil.virtual_memory().active:.3f} % of used RAM')
             tracemalloc.stop()
-            time.sleep(300)
+            print(f'Time taken: {(datetime.datetime.now()-start).microseconds} microseconds')
+            time.sleep(60)
 
 if __name__=="__main__":
     main()
