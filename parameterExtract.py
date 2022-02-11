@@ -25,6 +25,65 @@ try:
 except:
     print('Unable to import RPi.GPIO')
 
+def get_list_of_process_sorted_by_memory():
+    '''
+    Get list of running process sorted by Memory Usage
+    '''
+    processes = []
+    # Iterate over the list
+    for proc in psutil.process_iter():
+       try:
+           # Fetch process details as dict
+           pinfo = proc.as_dict(attrs=['memory_percent','name', 'username', 'pid'])
+           # Append dict to list
+           processes.append(pinfo);
+       except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+           pass
+    # Sort list of dict by key vms i.e. memory usage
+    processes = sorted(processes, key=lambda process: process['memory_percent'], reverse=True)
+    
+    grouped_res = {}
+    
+        
+    for row in processes[:10] :
+        if row['name'] in grouped_res:
+            grouped_res[row['name']] += float(row['memory_percent'])
+        else:
+            grouped_res[row['name']] = float(row['memory_percent'])
+            
+    return grouped_res
+
+def get_list_of_process_sorted_by_cpu():
+    output = os.popen('ps -Ao pcpu,comm,user,pid k-pcpu | head -10')
+    res = []
+    first_line = True
+    for line in output.readlines():
+        term = ''
+        row = []
+        line = line.rstrip('\n')
+        if first_line:
+            first_line = False
+            continue
+        for c in line:
+            if c == ' ' and term!='':
+                row.append(term)
+                term=''
+            elif c != ' ':
+                term+=c
+        row.append(term)
+        res.append(row)
+    
+    grouped_res = {}
+    for row in res:
+        if row[1] in grouped_res:
+            grouped_res[row[1]] += float(row[0])
+        else:
+            grouped_res[row[1]] = float(row[0])
+            
+    grouped_res = sorted(grouped_res.items(), key=lambda x:x[1], reverse=True)
+    grouped_res = dict(grouped_res)
+    
+    return grouped_res
 
 def print_data():
     if JTOP_IMPORT:
@@ -39,6 +98,7 @@ def print_data():
         print('================= RPI Info ==================')
         print(os.popen('vcgencmd measure_volts').read()[:-1])
         print(os.popen('vcgencmd get_throttled').read()[:-1])
+        print(os.popen('vcgencmd read_ring_osc').read()[:-1])
     print('============== Device Info ===============')
     print("MAC Address: " + str(get_mac()))
     print("Operating System: " + os.uname().sysname)
@@ -77,7 +137,8 @@ def print_data():
     # average system load over the last 1, 5 and 15 minutes
     # Processes which are using the CPU or waiting to use the CPU
     print('system load:' + str([x / psutil.cpu_count() * 100 for x in psutil.getloadavg()]))
-    
+    # Processes using most CPU%
+    print(get_list_of_process_sorted_by_cpu())
     print('=============== Memory Info ================')
     # Total physical memory in gb
     print('total physical memory:' + str(psutil.virtual_memory().total/10**9)+ ' GB')
@@ -87,7 +148,8 @@ def print_data():
     print('memory % available:' + str(psutil.virtual_memory().available * 100 / psutil.virtual_memory().total))
     # you can have the percentage of used RAM
     print('memory % used:', str(psutil.virtual_memory().percent))
-    
+    # Processes using most Memory%
+    print(get_list_of_process_sorted_by_memory())
     print('================ Disk Usage =================')
     # hard drive storage. How much percentage of storage (HDD, SSD) being used.
     print('total disk space: ' + str(psutil.disk_usage('/').total/10**9)+' GB')
@@ -117,8 +179,15 @@ def add_data_to_csv():
                 break
             data.append(jetson.temperature["GPU"])
     elif RPI_IMPORT:
-        data.append(float(re.sub("[^\d\.]", "", os.popen('vcgencmd measure_volts').read()[:-1])))
-        data.append(re.search(r'0(\w+)', os.popen('vcgencmd get_throttled').read()[:-1]).group())
+        voltage = re.sub("[^\d\.]", "", os.popen('vcgencmd measure_volts').read()[:-1])
+        if voltage is not None:
+            data.append(float(voltage))
+        throttled_state = re.search(r'0(\w+)', os.popen('vcgencmd get_throttled').read()[:-1])
+        if throttled_state is not None:
+            data.append(throttled_state.group())
+        ring_oscillation = re.search(r'(?<==).*(?=M)', os.popen('vcgencmd read_ring_osc').read()[:-1])
+        if ring_oscillation is not None:
+            data.append(ring_oscillation.group())
     data.append(get_mac())
     data.append(os.uname().sysname)
     data.append(os.uname().machine)
@@ -144,10 +213,12 @@ def add_data_to_csv():
     data.append(psutil.getloadavg()[0]/psutil.cpu_count() * 100)
     data.append(psutil.getloadavg()[1]/psutil.cpu_count() * 100)
     data.append(psutil.getloadavg()[2]/psutil.cpu_count() * 100)
+    data.append(get_list_of_process_sorted_by_cpu())
     data.append(psutil.virtual_memory().total/10**9)
     data.append(psutil.virtual_memory().active/10**6)
     data.append(psutil.virtual_memory().available * 100 / psutil.virtual_memory().total)
     data.append(psutil.virtual_memory().percent)
+    data.append(get_list_of_process_sorted_by_memory())
     data.append(psutil.disk_usage('/').percent)
     data.append(psutil.disk_usage('/').total/10**9)
     data.append(psutil.net_io_counters().bytes_sent)
@@ -180,7 +251,7 @@ def main():
             start = datetime.datetime.now()
             tracemalloc.start()
 
-            #print_data()
+            print_data()
 
             data = add_data_to_csv()
             
@@ -189,10 +260,11 @@ def main():
 
             print('----------------------------------------------')
             current, peak = tracemalloc.get_traced_memory()
-            #print(f"Program memory usage is {current / 10**6}MB; Peak was {peak / 10**6}MB")
-            #print(f'{peak *100 / psutil.virtual_memory().active:.3f} % of used RAM')
+            print(f"Program memory usage is {current / 10**6}MB; Peak was {peak / 10**6}MB")
+            print(f'{peak *100 / psutil.virtual_memory().active:.3f} % of used RAM')
             tracemalloc.stop()
             print(f'Time taken: {(datetime.datetime.now()-start).microseconds} microseconds')
+            print('----------------------------------------------')
             time.sleep(60)
 
 if __name__=="__main__":
