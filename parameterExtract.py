@@ -4,7 +4,7 @@ import tracemalloc
 import os
 from os.path import exists
 import datetime
-from uuid import getnode as get_mac
+import getmac
 import time
 import csv
 import re
@@ -85,6 +85,81 @@ def get_list_of_process_sorted_by_cpu():
     
     return grouped_res
 
+def get_model_pins(argument):
+    #Detect Raspberry Pi model and number of GPIO pins
+    switcher = {
+        "0002": ("Model B Revision 1.0 256Mb",17),
+        "0003": ("Model B Revision 1.0 + ECN0001 256Mb",17),
+        "0004": ("Model B Revision 2.0 256Mb",17),
+        "0005": ("Model B Revision 2.0 256Mb",17),
+        "0006": ("Model B Revision 2.0 256Mb",17),
+        "0007": ("Model A 256Mb",17),
+        "0008": ("Model A 256Mb",17),
+        "0009": ("Model A 256Mb",17),
+        "000d": ("Model B Revision 2.0 512Mb",17),
+        "000e": ("Model B Revision 2.0 512Mb",17),
+        "000f": ("Model B Revision 2.0 512Mb",17),
+        "0010": ("Model B+ 512Mb",26),
+        "0012": ("Model A+ 256Mb",26),
+        "0013": ("Model B+ 512Mb",26),
+        "13": ("Model B+ 512Mb",26),  # https://github.com/kgbplus/gpiotest/issues/7
+        "0015": ("Model A+ 256/512Mb",26),
+        "a01040": ("2 Model B Revision 1.0 1Gb",26),
+        "a01041": ("2 Model B Revision 1.1 1Gb",26),
+        "a21041": ("2 Model B Revision 1.1 1Gb",26),
+        "a22042": ("2 Model B (with BCM2837) 1Gb",26),
+        "900021": ("Model A+ 512Mb",26),
+        "900032": ("Model B+ 512Mb",26),
+        "900092": ("Zero Revision 1.2 512Mb",26),
+        "900093": ("Zero Revision 1.3 512Mb",26),
+        "920093": ("Zero Revision 1.3 512Mb",26),
+        "9000c1": ("Zero W Revision 1.1 512Mb",26),
+        "a02082": ("3 Model B 1Gb",26),
+        "a22082": ("3 Model B 1Gb",26),
+        "a32082": ("3 Model B 1Gb",26),
+        "a020d3": ("3 Model B+ 1Gb",26),
+        "9020e0": ("3 Model A+ 512Mb",26),
+        "a03111": ("4 Model B 1Gb",26),
+        "b03111": ("4 Model B 2Gb",26),
+        "b03112": ("4 Model B 2Gb",26),
+        "bo3114": ("4 Model B 2Gb",26),
+        "c03111": ("4 Model B 4Gb",26),
+        "c03112": ("4 Model B 4Gb",26),
+        "c03114": ("4 Model B 4Gb",26),
+        "d03114": ("4 Model B 8Gb",26),
+        "c03130": ("Pi 400 4Gb",26),
+        "b03140": ("Compute Module 4 2Gb",26),
+    }
+    return switcher.get(argument, ("not supported",0))
+
+
+def initGpio(gpio_ch, firstrun=0):
+    all_pin_states = ''
+
+    #Init GPIO
+    if not firstrun:
+        GPIO.cleanup()
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setwarnings(0)
+
+
+    #Init GPIO pins, save states etc.
+    for i,channel in enumerate(gpio_ch):
+        GPIO.setup(channel, GPIO.IN, pull_up_down=GPIO.PUD_DOWN) 
+        all_pin_states += str(GPIO.input(channel)) # Primary state
+            
+    return all_pin_states
+
+
+def get_gpio_pins_status(gpio_num):
+    #gpio_ch - array of GPIO lines numbers
+    if (gpio_num == 17):
+        gpio_ch = [0,1,4,7,8,9,10,11,14,15,17,18,21,22,23,24,25]
+    else:
+        gpio_ch = [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27]
+
+    return(initGpio(gpio_ch,1))
+
 def print_data():
     if JTOP_IMPORT:
         with jtop() as jetson:
@@ -99,12 +174,15 @@ def print_data():
         print(os.popen('vcgencmd measure_volts').read()[:-1])
         print(os.popen('vcgencmd get_throttled').read()[:-1])
         print(os.popen('vcgencmd read_ring_osc').read()[:-1])
+        raspi_model = get_model_pins(GPIO.RPI_INFO['REVISION'])
+        print(f'RPI Model: {raspi_model[0]}')
+        print('GPIO Pin States: ' + get_gpio_pins_status(raspi_model[1]))
     print('============== Device Info ===============')
-    print("MAC Address: " + str(get_mac()))
+    print("MAC Address: " + getmac.get_mac_address())
     print("Operating System: " + os.uname().sysname)
     print("Device Machine: " + os.uname().machine)
     hostname = socket.gethostname()    
-    IPAddr = socket.gethostbyname(hostname)    
+    IPAddr = socket.gethostbyname(hostname + ".local")    
     print("Computer Name: " + hostname)    
     print("Computer IP Address: " + IPAddr) 
 
@@ -188,11 +266,14 @@ def add_data_to_csv():
         ring_oscillation = re.search(r'(?<==).*(?=M)', os.popen('vcgencmd read_ring_osc').read()[:-1])
         if ring_oscillation is not None:
             data.append(ring_oscillation.group())
-    data.append(get_mac())
+        raspi_model = get_model_pins(GPIO.RPI_INFO['REVISION'])
+        data.append(raspi_model[0])
+        data.append(get_gpio_pins_status(raspi_model[1]))
+    data.append(getmac.get_mac_address())
     data.append(os.uname().sysname)
     data.append(os.uname().machine)
     hostname = socket.gethostname()    
-    IPAddr = socket.gethostbyname(hostname)    
+    IPAddr = socket.gethostbyname(hostname + ".local")    
     data.append(hostname)    
     data.append(IPAddr)
     data.append(os.popen('uptime -p').read()[:-1])
@@ -251,7 +332,7 @@ def main():
             start = datetime.datetime.now()
             tracemalloc.start()
 
-            print_data()
+            #print_data()
 
             data = add_data_to_csv()
             
